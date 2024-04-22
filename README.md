@@ -1,4 +1,4 @@
-# [WIP] typecast
-is a repository for casting goalng data Types regarding struct field names and field types
+# [WIP] reflectutil
+is a repository for casting Goalng data Types regarding struct field names and field types
 
-This repository is still a working in process
+This repository is still working in process
