@@ -4,6 +4,17 @@ import (
 	r "reflect"
 )
 
+// TOOD: add example of how to use CastScaner in combination of MakeFieldParserFrom function
+// CastScaner is a way to give the client control over scanning special data types
+// It is bettre to use your innter field structs
+type CastScaner interface {
+	CastScan(src r.Value)
+}
+
+type CastSourcer interface {
+	CastableTo() []r.Kind
+}
+
 // TypeCast is a simple implementation for casting one type into another similar data type
 func TypeCast(src, dst interface{}) error {
 	if src == nil || dst == nil {
@@ -224,3 +235,21 @@ func copyValue(srcFieldValue, dstFieldValue r.Value) error {
 
 	return nil
 }
+
+// MakePrserFrom Usage:
+//
+//	type MyType struct {
+//	    slug string
+//	}
+func MakeFieldParserFrom[T any]() func(src r.Value, dst interface{}) error {
+	// requiredType := r.TypeFor[T]()
+	return func(src r.Value, dst interface{}) error {
+		// parse for field
+		// try to cast source value into requiredType
+		// after casting try to assgn the value for struct type
+		// aasign the out goint function as base funtion
+		panic("not implemented yet")
+	}
+}
+
+// CastableTo() []r.Value
