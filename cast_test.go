@@ -8,8 +8,8 @@ func TestTypeCast(t *testing.T) {
 		dst interface{}
 	}
 	tests := []struct {
-		name    string
 		args    args
+		name    string
 		wantErr bool
 	}{
 		// TODO: Add test cases.

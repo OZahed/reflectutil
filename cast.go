@@ -73,7 +73,7 @@ func CopyMap(srcValue, dstValue r.Value) error {
 	dstKType := srcValue.Type().Key()
 	dstVType := srcValue.Type().Elem()
 
-	if !(srcKType == dstKType && srcVType == dstVType) {
+	if srcKType != dstKType || srcVType != dstVType {
 		return NewError(srcValue, dstValue, "key value types on maps are not compatible")
 	}
 
