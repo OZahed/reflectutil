@@ -1,6 +1,10 @@
 package typecast
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+	"time"
+)
 
 func TestTypeCast(t *testing.T) {
 	type args struct {
@@ -21,4 +25,51 @@ func TestTypeCast(t *testing.T) {
 			}
 		})
 	}
+}
+
+type Enum string
+
+func TestScanValue(t *testing.T) {
+
+	t.Run("Enum reading", func(t *testing.T) {
+		defaultValue := reflect.ValueOf("Hello World")
+		wantValue := Enum("Hello World")
+		gotRes, err := ScanValue[Enum](defaultValue)
+		if (err != nil) != false {
+			t.Errorf("ScanValue() error = %v, wantErr %v", err, false)
+			return
+		}
+		if !reflect.DeepEqual(gotRes, wantValue) {
+			t.Errorf("ScanValue() = %#v, want %#v", gotRes, wantValue)
+		}
+	})
+
+	t.Run("reading int", func(t *testing.T) {
+		now := time.Now()
+		defaultValue := reflect.ValueOf(now)
+		wantValue := now
+		gotRes, err := ScanValue[time.Time](defaultValue)
+		if (err != nil) != false {
+			t.Errorf("ScanValue() error = %v, wantErr %v", err, false)
+			return
+		}
+		if !reflect.DeepEqual(gotRes, wantValue) {
+			t.Errorf("ScanValue() = %#v, want %#v", gotRes, wantValue)
+		}
+	})
+
+	t.Run("error in reading uint634", func(t *testing.T) {
+		now := time.Now()
+		defaultValue := reflect.ValueOf(now)
+		wantValue := uint64(0)
+		gotRes, err := ScanValue[uint64](defaultValue)
+		if (err != nil) != true {
+			t.Errorf("ScanValue() error = %v, wantErr %v", err, true)
+			return
+		}
+		if !reflect.DeepEqual(gotRes, wantValue) {
+			t.Errorf("ScanValue() = %#v, want %#v", gotRes, wantValue)
+		}
+	})
+
 }

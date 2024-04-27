@@ -1,36 +1,77 @@
+/*
+typecast is a package to cast Type Values fot data types that are not really straight forward to cast like
+Structs, Maps, Slices of structs and ...
+*/
 package typecast
 
 import (
-	r "reflect"
+	"fmt"
+	"reflect"
 )
 
-// TOOD: add example of how to use CastScaner in combination of MakeFieldParserFrom function
-// CastScaner is a way to give the client control over scanning special data types
-// It is bettre to use your innter field structs
-type CastScaner interface {
-	CastScan(src r.Value)
+type CastMap map[reflect.Type]reflect.Value
+
+/*
+	Caster type is here to help casting types into possible types for a datatype
+
+example:
+
+In Repository package Storage.go:
+
+	type Storage struct {
+		storageName  string
+		storageSize  int
+	}
+
+	func (s Storage) CastTo() CastFuncMap {
+		funcsMap := make(CastFuncMap)
+		funcsMap[reflect.TypeOf("")] =reflect.ValueOf(s.storageName)
+		funcsMap[reflect.TypeOf(0)] = reflect.ValueOf(s.storageSize)
+
+		return funcMap
+	}
+*/
+type Caster interface {
+	// CasteTo defines a map of possible types that a specific type can be casted into
+	// If the destination type was not provided the default type cast procedure would be executed
+	CastTo() CastMap
 }
 
-type CastSourcer interface {
-	CastableTo() []r.Kind
+/*
+Castee interface is used for when you want to make control the casting processes on destination value
+
+example:
+
+	type Slug struct {
+		name  string
+	}
+
+	func(s *Storage)ScanReflect(value interface{}) error {
+		return reflectutil.Scan[string](value, &s.storageName)
+	}
+*/
+type Scanner interface {
+	// ScanReflect function, can change reflect rules, let's say Slug field in destination type is an struct like above
+	// but in source type is an string, using ScanReflect function helps with bypassing the default reflection behaviors
+	ScanReflect(value interface{}) error
 }
 
 // TypeCast is a simple implementation for casting one type into another similar data type
 func TypeCast(src, dst interface{}) error {
 	if src == nil || dst == nil {
-		return NewError(r.ValueOf(src), r.ValueOf(dst), "source or destination is nil")
+		return NewError(reflect.ValueOf(src), reflect.ValueOf(dst), "source or destination is nil")
 	}
 
-	dstType := r.TypeOf(dst)
-	dstValue := r.ValueOf(dst)
-	srcValue := r.ValueOf(src)
-	srcType := r.TypeOf(src)
+	dstType := reflect.TypeOf(dst)
+	dstValue := reflect.ValueOf(dst)
+	srcValue := reflect.ValueOf(src)
+	srcType := reflect.TypeOf(src)
 
-	if dstType.Kind() != r.Pointer {
+	if dstType.Kind() != reflect.Pointer {
 		return NewError(srcValue, dstValue, "destination is not a pointer and can not be assigned")
 	}
 
-	if srcType.Kind() == r.Pointer {
+	if srcType.Kind() == reflect.Pointer {
 		srcType = srcType.Elem()
 		srcValue = srcValue.Elem()
 	}
@@ -43,9 +84,19 @@ func TypeCast(src, dst interface{}) error {
 		return NewError(srcValue, dstValue, "source does not represent a value")
 	}
 
-	if dstType.Kind() == r.Pointer {
+	if dstType.Kind() == reflect.Pointer {
 		dstValue = dstValue.Elem()
 		dstType = dstType.Elem()
+	}
+
+	// caster value should be checked before Kind check, cause some kinds in caster ma do not match
+	err, ok := checkCaster(srcValue, dstValue)
+	if err != nil {
+		return err
+	}
+
+	if ok {
+		return nil
 	}
 
 	if srcType.Kind() != dstType.Kind() {
@@ -59,25 +110,25 @@ func TypeCast(src, dst interface{}) error {
 	}
 
 	switch {
-	case srcType.Kind() == r.Slice:
+	case srcType.Kind() == reflect.Slice:
 		return CopySlice(srcValue, dstValue)
-	case srcType.Kind() == r.Map:
+	case srcType.Kind() == reflect.Map:
 		return CopyMap(srcValue, dstValue)
-	case srcType.Kind() == r.Interface:
+	case srcType.Kind() == reflect.Interface:
 		return CopyInterface(srcValue, dstValue)
-	case srcType.Kind() == r.Func:
+	case srcType.Kind() == reflect.Func:
 		return NewError(srcValue, dstValue, "casting function types is not supported")
 	// we should check type equal before checking struct
 	case dstType == srcType:
 		return copyValue(srcValue, dstValue)
-	case srcType.Kind() == r.Struct:
+	case srcType.Kind() == reflect.Struct:
 		return CopyStruct(srcValue, dstValue)
 	}
 
 	return nil
 }
 
-func CopyMap(srcValue, dstValue r.Value) error {
+func CopyMap(srcValue, dstValue reflect.Value) error {
 	srcKType := srcValue.Type().Key()
 	srcVType := srcValue.Type().Elem()
 
@@ -89,7 +140,7 @@ func CopyMap(srcValue, dstValue r.Value) error {
 	}
 
 	if dstValue.IsZero() {
-		dstValue.Set(r.MakeMap(dstValue.Type()))
+		dstValue.Set(reflect.MakeMap(dstValue.Type()))
 	}
 
 	for _, k := range srcValue.MapKeys() {
@@ -100,17 +151,17 @@ func CopyMap(srcValue, dstValue r.Value) error {
 
 }
 
-func CopyInterface(srcValue, dstValue r.Value) error {
+func CopyInterface(srcValue, dstValue reflect.Value) error {
 	if !srcValue.Type().AssignableTo(dstValue.Type()) {
 		return NewError(srcValue, dstValue, "can not cast interfaces")
 	}
 
-	dstValue.Set(r.ValueOf(srcValue.Interface()))
+	dstValue.Set(reflect.ValueOf(srcValue.Interface()))
 
 	return nil
 }
 
-func CopySlice(srcSlice, dstSlice r.Value) error {
+func CopySlice(srcSlice, dstSlice reflect.Value) error {
 	srcElm := srcSlice.Type().Elem()
 	dstElm := dstSlice.Type().Elem()
 
@@ -122,15 +173,15 @@ func CopySlice(srcSlice, dstSlice r.Value) error {
 
 	for i := 0; i < srcSlice.Len(); i++ {
 		switch {
-		case srcElm.Kind() == r.Interface:
+		case srcElm.Kind() == reflect.Interface:
 			if err := CopyInterface(srcSlice.Index(i), dstSlice.Index(i)); err != nil {
 				return err
 			}
-		case srcElm.Kind() == r.Map:
+		case srcElm.Kind() == reflect.Map:
 			if err := CopyMap(srcSlice.Index(i), dstSlice.Index(i)); err != nil {
 				return err
 			}
-		case srcElm.Kind() == r.Slice:
+		case srcElm.Kind() == reflect.Slice:
 			if err := CopySlice(srcSlice.Index(i), dstSlice.Index(i)); err != nil {
 				return err
 			}
@@ -139,7 +190,7 @@ func CopySlice(srcSlice, dstSlice r.Value) error {
 			if err := copyValue(srcSlice, dstSlice); err != nil {
 				return err
 			}
-		case srcElm.Kind() == r.Struct:
+		case srcElm.Kind() == reflect.Struct:
 			if err := CopyStruct(srcSlice.Index(i), dstSlice.Index(i)); err != nil {
 				return err
 			}
@@ -149,9 +200,9 @@ func CopySlice(srcSlice, dstSlice r.Value) error {
 	return nil
 }
 
-func CopyStruct(srcValue, dstValue r.Value) error {
-	var srcStructField r.StructField
-	var srcFieldValue r.Value
+func CopyStruct(srcValue, dstValue reflect.Value) error {
+	var srcStructField reflect.StructField
+	var srcFieldValue reflect.Value
 
 	dstType := dstValue.Type()
 
@@ -170,6 +221,16 @@ func CopyStruct(srcValue, dstValue r.Value) error {
 
 		dstFieldValue := dstValue.FieldByName(srcStructField.Name)
 
+		// caster value should be checked before Kind check, cause some kinds in caster ma do not match
+		err, ok := checkCaster(srcFieldValue, dstFieldValue)
+		if err != nil {
+			return err
+		}
+
+		if ok {
+			continue
+		}
+
 		if srcStructField.Type.Kind() != dstStructField.Type.Kind() {
 			return NewError(srcFieldValue, dstFieldValue, "are not the same kind")
 		}
@@ -178,15 +239,15 @@ func CopyStruct(srcValue, dstValue r.Value) error {
 		// Unless there is a type alias or Enum or an struct
 
 		switch {
-		case srcStructField.Type.Kind() == r.Slice, srcStructField.Type.Kind() == r.Array:
+		case srcStructField.Type.Kind() == reflect.Slice, srcStructField.Type.Kind() == reflect.Array:
 			if err := CopySlice(srcFieldValue, dstFieldValue); err != nil {
 				return err
 			}
-		case srcStructField.Type.Kind() == r.Map:
+		case srcStructField.Type.Kind() == reflect.Map:
 			if err := CopyMap(srcFieldValue, dstFieldValue); err != nil {
 				return err
 			}
-		case srcStructField.Type.Kind() == r.Interface:
+		case srcStructField.Type.Kind() == reflect.Interface:
 			if err := CopyInterface(srcFieldValue, dstFieldValue); err != nil {
 				return err
 			}
@@ -194,7 +255,7 @@ func CopyStruct(srcValue, dstValue r.Value) error {
 			if err := copyValue(srcFieldValue, dstFieldValue); err != nil {
 				return err
 			}
-		case srcStructField.Type.Kind() == r.Struct:
+		case srcStructField.Type.Kind() == reflect.Struct:
 			if err := CopyStruct(srcFieldValue, dstFieldValue); err != nil {
 				return err
 			}
@@ -210,23 +271,23 @@ func CopyStruct(srcValue, dstValue r.Value) error {
 	return nil
 }
 
-func copyValue(srcFieldValue, dstFieldValue r.Value) error {
+func copyValue(srcFieldValue, dstFieldValue reflect.Value) error {
 	switch {
 	// these switch types are required to handle type aliases like Enums
-	case srcFieldValue.Type().Kind() == r.Pointer:
+	case srcFieldValue.Type().Kind() == reflect.Pointer:
 		// Preventing direct copy of pointer
 		return copyValue(srcFieldValue.Elem(), dstFieldValue.Elem())
 	case srcFieldValue.Type() == dstFieldValue.Type():
 		dstFieldValue.Set(srcFieldValue)
 	case srcFieldValue.Type().Kind() == dstFieldValue.Type().Kind():
 		switch dstFieldValue.Type().Kind() {
-		case r.Int, r.Int64, r.Int32, r.Int16, r.Int8:
+		case reflect.Int, reflect.Int64, reflect.Int32, reflect.Int16, reflect.Int8:
 			dstFieldValue.SetInt(srcFieldValue.Int())
-		case r.Uint, r.Uint64, r.Uint32, r.Uint16, r.Uint8:
+		case reflect.Uint, reflect.Uint64, reflect.Uint32, reflect.Uint16, reflect.Uint8:
 			dstFieldValue.SetUint(srcFieldValue.Uint())
-		case r.Float32, r.Float64:
+		case reflect.Float32, reflect.Float64:
 			dstFieldValue.SetFloat(srcFieldValue.Float())
-		case r.String:
+		case reflect.String:
 			dstFieldValue.SetString(srcFieldValue.String())
 		}
 	default:
@@ -236,20 +297,86 @@ func copyValue(srcFieldValue, dstFieldValue r.Value) error {
 	return nil
 }
 
+// if checkCaster is called, the type is already a Caster
+func checkCaster(srcValue, dstValue reflect.Value) (err error, hadType bool) {
+	if !srcValue.Type().AssignableTo(reflect.TypeOf((Caster)(nil))) {
+		return nil, false
+	}
+
+	res := srcValue.MethodByName("CastTo").Call([]reflect.Value{})
+
+	castMap, ok := res[0].Interface().(CastMap)
+	if !ok {
+		return NewError(
+			srcValue,
+			dstValue, "expected the source to be of reflectutil.Caster type",
+		), true
+	}
+
+	if castMap == nil {
+		return nil, false
+	}
+
+	val, ok := castMap[dstValue.Type()]
+	if !ok {
+		return nil, false
+	}
+
+	dstValue.Set(val)
+
+	return nil, true
+}
+
 // MakePrserFrom Usage:
 //
 //	type MyType struct {
 //	    slug string
 //	}
-func MakeFieldParserFrom[T any]() func(src r.Value, dst interface{}) error {
+func ScanValue[T any](srcValue reflect.Value) (res T, err error) {
 	// requiredType := r.TypeFor[T]()
-	return func(src r.Value, dst interface{}) error {
-		// parse for field
-		// try to cast source value into requiredType
-		// after casting try to assgn the value for struct type
-		// aasign the out goint function as base funtion
-		panic("not implemented yet")
-	}
-}
+	destType := reflect.TypeFor[T]()
+	destValue := reflect.New(destType).Elem()
 
-// CastableTo() []r.Value
+	res = destValue.Interface().(T)
+
+	if destType.Kind() == reflect.Pointer {
+		destType = destType.Elem()
+	}
+
+	// If source is already of destination Type
+	if destType == srcValue.Type() {
+		res = srcValue.Interface().(T)
+		return res, nil
+	}
+
+	if !destValue.CanSet() {
+		return res, NewError(srcValue, destValue, "destination can not be set")
+	}
+
+	if destType == srcValue.Type() {
+		return srcValue.Interface().(T), nil
+	}
+
+	if destType.Kind() == reflect.String {
+		if srcValue.Type().Kind() == reflect.String {
+			destValue.SetString(srcValue.String())
+			return destValue.Interface().(T), nil
+		}
+
+		if srcValue.Type().AssignableTo(reflect.TypeOf((fmt.Stringer)(nil))) {
+			results := srcValue.MethodByName("String").Call([]reflect.Value{})
+
+			return results[0].Interface().(T), nil
+		}
+	}
+
+	// if the source value expects an interface,Array, Map or Struct
+	// Side effect Call
+	err = copyValue(srcValue, destValue)
+	if err != nil {
+		return res, err
+	}
+
+	// destValue is a new value of type T so this type cast won't panic
+	return destValue.Interface().(T), nil
+}
