@@ -46,14 +46,14 @@ example:
 		name  string
 	}
 
-	func(s *Storage)ScanReflect(value interface{}) error {
+	func(s *Storage)ScanReflect(value reflect.Value) error {
 		return reflectutil.Scan[string](value, &s.storageName)
 	}
 */
 type Scanner interface {
 	// ScanReflect function, can change reflect rules, let's say Slug field in destination type is an struct like above
 	// but in source type is an string, using ScanReflect function helps with bypassing the default reflection behaviors
-	ScanReflect(value interface{}) error
+	ScanReflect(value reflect.Value) error
 }
 
 // TypeCast is a simple implementation for casting one type into another similar data type
@@ -90,20 +90,19 @@ func TypeCast(src, dst interface{}) error {
 	}
 
 	// caster value should be checked before Kind check, cause some kinds in caster ma do not match
-	err, ok := checkCaster(srcValue, dstValue)
-	if err != nil {
-		return err
+	if srcType.AssignableTo(reflect.TypeOf((Caster)(nil))) {
+		return callCaster(srcValue, dstValue)
 	}
 
-	if ok {
-		return nil
+	if dstType.AssignableTo(reflect.TypeOf((Scanner)(nil))) {
+		return callScanner(srcValue, dstValue)
 	}
 
 	if srcType.Kind() != dstType.Kind() {
 		return NewError(srcValue, dstValue, "source and destination are not of same reflect kind")
 	}
 
-	if srcValue.Type() == dstValue.Type() {
+	if srcType == dstType {
 		dstValue.Set(srcValue)
 
 		return nil
@@ -161,7 +160,7 @@ func CopyInterface(srcValue, dstValue reflect.Value) error {
 	return nil
 }
 
-func CopySlice(srcSlice, dstSlice reflect.Value) error {
+func CopySlice(srcSlice, dstSlice reflect.Value) (err error) {
 	srcElm := srcSlice.Type().Elem()
 	dstElm := dstSlice.Type().Elem()
 
@@ -172,6 +171,23 @@ func CopySlice(srcSlice, dstSlice reflect.Value) error {
 	dstSlice.SetLen(srcSlice.Len())
 
 	for i := 0; i < srcSlice.Len(); i++ {
+		if srcSlice.Index(i).Type().AssignableTo(reflect.TypeOf((Caster)(nil))) {
+			err = callCaster(srcSlice.Index(i), dstSlice.Index(i))
+			if err != nil {
+				return err
+			}
+
+			continue
+		}
+
+		if dstSlice.Index(i).Type().AssignableTo(reflect.TypeOf((Scanner)(nil))) {
+			err = callScanner(srcSlice.Index(i), dstSlice.Index(i))
+			if err != nil {
+				return err
+			}
+			continue
+		}
+
 		switch {
 		case srcElm.Kind() == reflect.Interface:
 			if err := CopyInterface(srcSlice.Index(i), dstSlice.Index(i)); err != nil {
@@ -222,12 +238,21 @@ func CopyStruct(srcValue, dstValue reflect.Value) error {
 		dstFieldValue := dstValue.FieldByName(srcStructField.Name)
 
 		// caster value should be checked before Kind check, cause some kinds in caster ma do not match
-		err, ok := checkCaster(srcFieldValue, dstFieldValue)
-		if err != nil {
-			return err
+		if srcFieldValue.Type().AssignableTo(reflect.TypeOf((Caster)(nil))) {
+			err := callCaster(srcFieldValue, dstFieldValue)
+			if err != nil {
+				return err
+			}
+
+			continue
 		}
 
-		if ok {
+		if dstFieldValue.Type().AssignableTo(reflect.TypeOf((Scanner)(nil))) {
+			err := callScanner(srcFieldValue, dstFieldValue)
+			if err != nil {
+				return err
+			}
+
 			continue
 		}
 
@@ -297,34 +322,60 @@ func copyValue(srcFieldValue, dstFieldValue reflect.Value) error {
 	return nil
 }
 
-// if checkCaster is called, the type is already a Caster
-func checkCaster(srcValue, dstValue reflect.Value) (err error, hadType bool) {
-	if !srcValue.Type().AssignableTo(reflect.TypeOf((Caster)(nil))) {
-		return nil, false
+func callScanner(srcValue, dstValue reflect.Value) error {
+	meth := dstValue.MethodByName("ScanReflect")
+	if !meth.IsValid() {
+		return NewError(srcValue, dstValue, "destination does not implement Scanner interface")
 	}
 
-	res := srcValue.MethodByName("CastTo").Call([]reflect.Value{})
+	res := meth.Call([]reflect.Value{srcValue})
+
+	if len(res) != 1 {
+		return NewError(srcValue, dstValue, "destination did not properly implement ScanReflect method")
+	}
+
+	err, ok := res[0].Interface().(error)
+
+	if !ok {
+		return NewError(srcValue, dstValue, "destination did not properly implement ScanReflect method")
+	}
+
+	return err
+}
+
+// if callCaster is called, the type is already a Caster
+func callCaster(srcValue, dstValue reflect.Value) error {
+	meth := srcValue.MethodByName("CastTo")
+	if !meth.IsValid() {
+		return NewError(srcValue, dstValue, "source does not implement Caster interface")
+	}
+
+	res := meth.Call([]reflect.Value{})
+
+	if len(res) != 1 {
+		return NewError(srcValue, dstValue, "source does not implement Caster interface")
+	}
 
 	castMap, ok := res[0].Interface().(CastMap)
 	if !ok {
 		return NewError(
 			srcValue,
 			dstValue, "expected the source to be of reflectutil.Caster type",
-		), true
+		)
 	}
 
 	if castMap == nil {
-		return nil, false
+		return nil
 	}
 
 	val, ok := castMap[dstValue.Type()]
 	if !ok {
-		return nil, false
+		return nil
 	}
 
 	dstValue.Set(val)
 
-	return nil, true
+	return nil
 }
 
 // MakePrserFrom Usage:
