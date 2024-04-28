@@ -13,16 +13,16 @@ type slug struct {
 	slug string
 }
 
-func (s *slug) ScanValue(value r.Value) error {
-	sl, err := ru.ReadValue[string](value)
-	if err != nil {
-		return err
-	}
+// func (s *slug) ScanValue(value r.Value) error {
+// 	sl, err := ru[string](value)
+// 	if err != nil {
+// 		return err
+// 	}
 
-	s.slug = sl
+// 	s.slug = sl
 
-	return nil
-}
+// 	return nil
+// }
 
 func (s slug) CastTo() ru.CastMap {
 	return ru.CastMap{
