@@ -3,11 +3,32 @@ package entities
 import (
 	"io"
 	"os"
+	r "reflect"
 	"time"
+
+	ru "github.com/OZahed/reflectutil"
 )
 
 type slug struct {
 	slug string
+}
+
+func (s *slug) ScanValue(value r.Value) error {
+	sl, err := ru.ReadValue[string](value)
+	if err != nil {
+		return err
+	}
+
+	s.slug = sl
+
+	return nil
+}
+
+func (s slug) CastTo() ru.CastMap {
+	return ru.CastMap{
+		r.TypeOf(""):     r.ValueOf(s.slug),
+		r.TypeOf(slug{}): r.ValueOf(s),
+	}
 }
 
 type Enum string
@@ -18,6 +39,7 @@ const (
 )
 
 type ExtraInfo struct {
+	Slug     slug
 	Writer   io.Writer
 	Location string
 }

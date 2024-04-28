@@ -6,6 +6,7 @@ import (
 )
 
 type ExtraInfo struct {
+	Slug     string
 	Writer   io.Writer
 	Location string
 }
