@@ -14,6 +14,10 @@ type slug struct {
 	slug string
 }
 
+func (s slug) String() string {
+	return s.slug
+}
+
 func (s *slug) ScanValue(value interface{}) error {
 	// nolint
 	switch value.(type) {
