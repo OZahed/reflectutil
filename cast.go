@@ -378,12 +378,9 @@ func callCaster(srcValue, dstValue reflect.Value) error {
 	return nil
 }
 
-// MakePrserFrom Usage:
-//
-//	type MyType struct {
-//	    slug string
-//	}
-func ScanValue[T any](srcValue reflect.Value) (res T, err error) {
+// ReadValue turns a reflect value into specified type or returns error
+// This function exists to help with  customized Scans written by clients
+func ReadValue[T any](srcValue reflect.Value) (res T, err error) {
 	// requiredType := r.TypeFor[T]()
 	destType := reflect.TypeFor[T]()
 	destValue := reflect.New(destType).Elem()
