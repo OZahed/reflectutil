@@ -1,3 +1,3 @@
-module github.com/OZahed/typecast
+module github.com/OZahed/reflectutil
 
-go 1.21
+go 1.22

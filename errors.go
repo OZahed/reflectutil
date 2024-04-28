@@ -18,7 +18,7 @@ func (c Error) Error() string {
 func NewError(src, dst reflect.Value, msg string) Error {
 	return Error{
 		Msg:     msg,
-		DstType: dst.String(),
-		SrcType: src.String(),
+		DstType: dst.Type().String(),
+		SrcType: src.Type().String(),
 	}
 }
