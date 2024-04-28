@@ -5,8 +5,12 @@ Structs, Maps, Slices of structs and ...
 package reflectutil
 
 import (
-	"fmt"
 	"reflect"
+)
+
+var (
+	scannerType = reflect.TypeOf((*Scanner)(nil)).Elem()
+	casterType  = reflect.TypeOf((*Caster)(nil)).Elem()
 )
 
 type CastMap map[reflect.Type]reflect.Value
@@ -37,6 +41,11 @@ type Caster interface {
 	CastTo() CastMap
 }
 
+func implementsCaster(v reflect.Value) bool {
+
+	return reflect.TypeOf(v.Interface()).Implements(casterType)
+}
+
 /*
 Castee interface is used for when you want to make control the casting processes on destination value
 
@@ -53,7 +62,12 @@ example:
 type Scanner interface {
 	// ScanValue function, can change reflect rules, let's say Slug field in destination type is an struct like above
 	// but in source type is an string, using ScanValue function helps with bypassing the default reflection behaviors
-	ScanValue(value reflect.Value) error
+	ScanValue(value interface{}) error
+}
+
+func implementsScanner(v reflect.Value) bool {
+	ptrValue := reflect.New(v.Type())
+	return reflect.TypeOf(ptrValue.Interface()).Implements(scannerType)
 }
 
 // TypeCast is a simple implementation for casting one type into another similar data type
@@ -90,11 +104,11 @@ func TypeCast(src, dst interface{}) error {
 	}
 
 	// caster value should be checked before Kind check, cause some kinds in caster ma do not match
-	if srcType.AssignableTo(reflect.TypeOf((Caster)(nil))) {
+	if implementsCaster(srcValue) {
 		return callCaster(srcValue, dstValue)
 	}
 
-	if dstType.AssignableTo(reflect.TypeOf((Scanner)(nil))) {
+	if implementsScanner(dstValue) {
 		return callScanner(srcValue, dstValue)
 	}
 
@@ -171,7 +185,7 @@ func CopySlice(srcSlice, dstSlice reflect.Value) (err error) {
 	dstSlice.SetLen(srcSlice.Len())
 
 	for i := 0; i < srcSlice.Len(); i++ {
-		if srcSlice.Index(i).Type().AssignableTo(reflect.TypeOf((Caster)(nil))) {
+		if implementsCaster(srcSlice.Index(i)) {
 			err = callCaster(srcSlice.Index(i), dstSlice.Index(i))
 			if err != nil {
 				return err
@@ -180,7 +194,7 @@ func CopySlice(srcSlice, dstSlice reflect.Value) (err error) {
 			continue
 		}
 
-		if dstSlice.Index(i).Type().AssignableTo(reflect.TypeOf((Scanner)(nil))) {
+		if implementsScanner(dstSlice.Index(i)) {
 			err = callScanner(srcSlice.Index(i), dstSlice.Index(i))
 			if err != nil {
 				return err
@@ -238,7 +252,7 @@ func CopyStruct(srcValue, dstValue reflect.Value) error {
 		dstFieldValue := dstValue.FieldByName(srcStructField.Name)
 
 		// caster value should be checked before Kind check, cause some kinds in caster ma do not match
-		if srcFieldValue.Type().AssignableTo(reflect.TypeOf((Caster)(nil))) {
+		if implementsCaster(srcFieldValue) {
 			err := callCaster(srcFieldValue, dstFieldValue)
 			if err != nil {
 				return err
@@ -247,7 +261,7 @@ func CopyStruct(srcValue, dstValue reflect.Value) error {
 			continue
 		}
 
-		if dstFieldValue.Type().AssignableTo(reflect.TypeOf((Scanner)(nil))) {
+		if implementsScanner(dstFieldValue) {
 			err := callScanner(srcFieldValue, dstFieldValue)
 			if err != nil {
 				return err
@@ -322,8 +336,11 @@ func copyValue(srcFieldValue, dstFieldValue reflect.Value) error {
 	return nil
 }
 
-func callScanner(srcValue, dstValue reflect.Value) error {
-	meth := dstValue.MethodByName("ScanValue")
+// scanner requires to be on pointer value
+func callScanner(srcValue, dstValue reflect.Value) (err error) {
+	newDst := reflect.New(dstValue.Type())
+
+	meth := newDst.MethodByName("ScanValue")
 	if !meth.IsValid() {
 		return NewError(srcValue, dstValue, "destination does not implement Scanner interface")
 	}
@@ -334,13 +351,13 @@ func callScanner(srcValue, dstValue reflect.Value) error {
 		return NewError(srcValue, dstValue, "destination did not properly implement ScanValue method")
 	}
 
-	err, ok := res[0].Interface().(error)
-
-	if !ok {
-		return NewError(srcValue, dstValue, "destination did not properly implement ScanValue method")
+	err, _ = res[0].Interface().(error)
+	if err != nil {
+		return err
 	}
 
-	return err
+	dstValue.Set(newDst.Elem())
+	return nil
 }
 
 // if callCaster is called, the type is already a Caster
@@ -376,55 +393,4 @@ func callCaster(srcValue, dstValue reflect.Value) error {
 	dstValue.Set(val)
 
 	return nil
-}
-
-// ReadValue turns a reflect value into specified type or returns error
-// This function exists to help with  customized Scans written by clients
-func ReadValue[T any](srcValue reflect.Value) (res T, err error) {
-	// requiredType := r.TypeFor[T]()
-	destType := reflect.TypeFor[T]()
-	destValue := reflect.New(destType).Elem()
-
-	res = destValue.Interface().(T)
-
-	if destType.Kind() == reflect.Pointer {
-		destType = destType.Elem()
-	}
-
-	// If source is already of destination Type
-	if destType == srcValue.Type() {
-		res = srcValue.Interface().(T)
-		return res, nil
-	}
-
-	if !destValue.CanSet() {
-		return res, NewError(srcValue, destValue, "destination can not be set")
-	}
-
-	if destType == srcValue.Type() {
-		return srcValue.Interface().(T), nil
-	}
-
-	if destType.Kind() == reflect.String {
-		if srcValue.Type().Kind() == reflect.String {
-			destValue.SetString(srcValue.String())
-			return destValue.Interface().(T), nil
-		}
-
-		if srcValue.Type().AssignableTo(reflect.TypeOf((fmt.Stringer)(nil))) {
-			results := srcValue.MethodByName("String").Call([]reflect.Value{})
-
-			return results[0].Interface().(T), nil
-		}
-	}
-
-	// if the source value expects an interface,Array, Map or Struct
-	// Side effect Call
-	err = copyValue(srcValue, destValue)
-	if err != nil {
-		return res, err
-	}
-
-	// destValue is a new value of type T so this type cast won't panic
-	return destValue.Interface().(T), nil
 }

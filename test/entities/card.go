@@ -1,6 +1,7 @@
 package entities
 
 import (
+	"errors"
 	"io"
 	"os"
 	r "reflect"
@@ -13,16 +14,19 @@ type slug struct {
 	slug string
 }
 
-// func (s *slug) ScanValue(value r.Value) error {
-// 	sl, err := ru[string](value)
-// 	if err != nil {
-// 		return err
-// 	}
+func (s *slug) ScanValue(value interface{}) error {
+	// nolint
+	switch value.(type) {
+	case string:
+		s.slug = value.(string)
+	case Enum:
+		s.slug = string(value.(Enum))
+	default:
+		return errors.New("invalid error source type")
+	}
 
-// 	s.slug = sl
-
-// 	return nil
-// }
+	return nil
+}
 
 func (s slug) CastTo() ru.CastMap {
 	return ru.CastMap{
@@ -39,16 +43,18 @@ const (
 )
 
 type ExtraInfo struct {
-	Slug     slug
-	Writer   io.Writer
-	Location string
+	Writer    io.Writer
+	Slug      slug
+	Location  string
+	TimeEpoch int64
 }
 
 type InnerStruct struct {
-	At       time.Time
-	Extras   map[string]int
-	Name     Enum
-	Duration time.Duration
+	TimeString string
+	At         time.Time
+	Extras     map[string]int
+	Name       Enum
+	Duration   time.Duration
 }
 
 type InnerStruct2 struct {
@@ -57,24 +63,23 @@ type InnerStruct2 struct {
 }
 
 type Card struct {
+	Time  time.Time
 	Name  string
 	Inner InnerStruct
 	InnerStruct2
 	Age int32
 }
 
-func GetEntity() Card {
-	f, err := os.OpenFile("test.txt", os.O_CREATE|os.O_TRUNC|os.O_RDWR, 0664)
-	if err != nil {
-		panic("could not open the file")
-	}
+func GetEntity(now time.Time, f *os.File) Card {
 	return Card{
+		Time: now,
 		Name: "Test Value",
 		Age:  1000,
 		Inner: InnerStruct{
-			Name:     Value2,
-			At:       time.Now(),
-			Duration: time.Hour,
+			TimeString: now.Format(time.RFC3339),
+			Name:       Value2,
+			At:         time.Now(),
+			Duration:   time.Hour,
 			Extras: map[string]int{
 				"key1": 1,
 				"key2": 2,
@@ -84,31 +89,37 @@ func GetEntity() Card {
 			Name: Value1,
 			Extras: []ExtraInfo{
 				{
-					Writer:   os.Stdout,
-					Location: "testLoc",
+					Slug: slug{
+						slug: "StdOut",
+					},
+					TimeEpoch: now.Unix(),
+					Writer:    os.Stdout,
+					Location:  "testLoc",
 				},
 				{
-					Writer:   f,
-					Location: "testLoc",
+					Slug: slug{
+						slug: "File",
+					},
+					TimeEpoch: now.Unix(),
+					Writer:    f,
+					Location:  "testLoc",
 				},
 			},
 		},
 	}
 }
 
-func GetCards() []Card {
-	f, err := os.OpenFile("test.txt", os.O_CREATE|os.O_TRUNC|os.O_RDWR, 0664)
-	if err != nil {
-		panic("could not open the file")
-	}
+func GetCards(t time.Time, f *os.File) []Card {
 	return []Card{
 		{
+			Time: t,
 			Name: "Test Value",
 			Age:  1000,
 			Inner: InnerStruct{
-				Name:     Value2,
-				At:       time.Now(),
-				Duration: time.Hour,
+				TimeString: t.Format(time.RFC3339),
+				Name:       Value2,
+				At:         time.Now(),
+				Duration:   time.Hour,
 				Extras: map[string]int{
 					"key1": 1,
 					"key2": 2,
@@ -118,23 +129,33 @@ func GetCards() []Card {
 				Name: Value1,
 				Extras: []ExtraInfo{
 					{
-						Writer:   os.Stdout,
-						Location: "testLoc",
+						Slug: slug{
+							slug: "STD",
+						},
+						TimeEpoch: t.Unix(),
+						Writer:    os.Stdout,
+						Location:  "testLoc",
 					},
 					{
-						Writer:   f,
-						Location: "testLoc",
+						Slug: slug{
+							slug: "F",
+						},
+						TimeEpoch: t.Unix(),
+						Writer:    f,
+						Location:  "testLoc",
 					},
 				},
 			},
 		},
 		{
+			Time: t,
 			Name: "Test Value",
 			Age:  1000,
 			Inner: InnerStruct{
-				Name:     Value2,
-				At:       time.Now(),
-				Duration: time.Hour,
+				TimeString: t.Format(time.RFC3339),
+				Name:       Value2,
+				At:         time.Now(),
+				Duration:   time.Hour,
 				Extras: map[string]int{
 					"key1": 1,
 					"key2": 2,
@@ -144,12 +165,20 @@ func GetCards() []Card {
 				Name: Value1,
 				Extras: []ExtraInfo{
 					{
-						Writer:   os.Stdout,
-						Location: "testLoc",
+						Slug: slug{
+							slug: "STDOUT",
+						},
+						TimeEpoch: t.Unix(),
+						Writer:    os.Stdout,
+						Location:  "testLoc",
 					},
 					{
-						Writer:   f,
-						Location: "testLoc",
+						Slug: slug{
+							slug: "FILE",
+						},
+						TimeEpoch: t.Unix(),
+						Writer:    f,
+						Location:  "testLoc",
 					},
 				},
 			},
