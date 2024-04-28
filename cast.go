@@ -46,14 +46,14 @@ example:
 		name  string
 	}
 
-	func(s *Storage)ScanReflect(value reflect.Value) error {
+	func(s *Storage)ScanValue(value reflect.Value) error {
 		return reflectutil.Scan[string](value, &s.storageName)
 	}
 */
 type Scanner interface {
-	// ScanReflect function, can change reflect rules, let's say Slug field in destination type is an struct like above
-	// but in source type is an string, using ScanReflect function helps with bypassing the default reflection behaviors
-	ScanReflect(value reflect.Value) error
+	// ScanValue function, can change reflect rules, let's say Slug field in destination type is an struct like above
+	// but in source type is an string, using ScanValue function helps with bypassing the default reflection behaviors
+	ScanValue(value reflect.Value) error
 }
 
 // TypeCast is a simple implementation for casting one type into another similar data type
@@ -323,7 +323,7 @@ func copyValue(srcFieldValue, dstFieldValue reflect.Value) error {
 }
 
 func callScanner(srcValue, dstValue reflect.Value) error {
-	meth := dstValue.MethodByName("ScanReflect")
+	meth := dstValue.MethodByName("ScanValue")
 	if !meth.IsValid() {
 		return NewError(srcValue, dstValue, "destination does not implement Scanner interface")
 	}
@@ -331,13 +331,13 @@ func callScanner(srcValue, dstValue reflect.Value) error {
 	res := meth.Call([]reflect.Value{srcValue})
 
 	if len(res) != 1 {
-		return NewError(srcValue, dstValue, "destination did not properly implement ScanReflect method")
+		return NewError(srcValue, dstValue, "destination did not properly implement ScanValue method")
 	}
 
 	err, ok := res[0].Interface().(error)
 
 	if !ok {
-		return NewError(srcValue, dstValue, "destination did not properly implement ScanReflect method")
+		return NewError(srcValue, dstValue, "destination did not properly implement ScanValue method")
 	}
 
 	return err
