@@ -13,7 +13,6 @@ go test -bench=. -benchmem  -count=5 ./test/...
 ```
 
 how to read benchmark results:
-with this set of keys the output would look like this
 
 | Benchmark-name-CPU_COUNT             | number of times function have been called | how long it took for function call | number of bytes for that operation | number of times memory allocation happened |
 | :----------------------------------- | :---------------------------------------: | :--------------------------------: | :--------------------------------: | :----------------------------------------: |
