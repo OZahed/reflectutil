@@ -1,4 +1,4 @@
-package typecast
+package reflectutil
 
 import (
 	"fmt"

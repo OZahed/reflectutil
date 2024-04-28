@@ -1,8 +1,8 @@
 /*
-typecast is a package to cast Type Values fot data types that are not really straight forward to cast like
+reflectutil is a package to cast Type Values fot data types that are not really straight forward to cast like
 Structs, Maps, Slices of structs and ...
 */
-package typecast
+package reflectutil
 
 import (
 	"fmt"
