@@ -4,7 +4,7 @@ is a repository for casting Goalng data Types regarding struct field names and f
 
 This repository is still working in progress
 
-based on benchmarks below which you can find the actual benchmark functions for common type casts in `test/commoncast` package using reflectutil is
+based on benchmarks below which you can find the actual benchmark functions for common type casts in `test/commoncast` package using reflectutil is **_~4X slower and ~4X` more memory hungry than Common way of casting types_** benchmark results may vary in different use cases, but in many use cases this extra usage in memory and cpu time are game changer
 
 benchmark:
 
