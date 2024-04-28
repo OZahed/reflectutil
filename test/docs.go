@@ -1,5 +1,5 @@
 package test
 
-import (
-	_ "github.com/OZahed/reflectutil"
-)
+// import (
+// 	_ "github.com/OZahed/reflectutil"
+// )
