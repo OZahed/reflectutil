@@ -89,11 +89,11 @@ func TestTypeCastToEntityCard(t *testing.T) {
 	}
 
 	defer func() {
-		if err := f.Close(); err != nil {
+		if err = f.Close(); err != nil {
 			t.Fatal(err)
 		}
 
-		if err := os.Remove("tmp_test.txt"); err != nil {
+		if err = os.Remove("tmp_test.txt"); err != nil {
 			t.Fatal(err)
 		}
 	}()
