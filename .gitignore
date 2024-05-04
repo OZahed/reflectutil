@@ -24,4 +24,8 @@ go.work
 .idea/
 .zed/
 
+*.pprof
+*/profiler/profiler
+
 *.todo
+
